@@ -1,0 +1,25 @@
+[project]
+name = "md-labeler"
+version = "0.1.0"
+description = "Print-ready MiniDisc disc, slipcase and spine labels"
+authors = [
+    { name = "Trevor" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "pymupdf>=2.1",
+    "reportlab>=5.1.0",
+    "typer>=0.29.1",
+]
+
+[project.scripts]
+mdl = "md_labeler.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.11.16,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
