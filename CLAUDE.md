@@ -66,6 +66,13 @@ The user prints on **blank sticker paper and cuts by hand**, so we own the sheet
 - Also write a **PNG proof** of each sheet (150 dpi) for quick visual review.
 - Colour is RGB (home inkjet or laser printer). No CMYK pipeline.
 
+### Printing (verified on the user's Canon G600, CUPS)
+CUPS defaults to `print-scaling=auto`, which shrinks a full-size page to the printable area
+by about 3%, even with "Actual size" selected in Okular. `mdl print` (in `printing.py`) runs
+`lp -o media=<paper> -o print-scaling=none -o fit-to-page=false`, reading the paper size from
+the PDF itself. With this, the 100 mm ruler measures true and no scale correction is needed. Don't add a
+calibration factor to fix scaling problems; check the print path first.
+
 ## Tech stack
 Python ≥3.12, managed with **uv** (`uv run`, `uv add`). Chosen libraries:
 - **reportlab**: PDF generation (clip paths, embedded TTF fonts, precise placement).
@@ -130,6 +137,7 @@ After `fetch`, for every album without a `style.json` (or that has `needs_review
 ## Commands
 ```
 uv run mdl testsheet [--paper letter|a4] [--pages 2 | --albums N]  # placeholder labels + guides -> out/testsheet.pdf
+uv run mdl print [FILE] [--gui] [--dry-run]  # true-size print; no FILE = fzf picker over out/*.pdf
 uv run pytest
 # planned:
 uv run mdl fetch albums.txt            # metadata + art -> work/
@@ -145,7 +153,8 @@ src/md_labeler/
   layout.py         SheetConfig, packing labels onto pages
   render/sheet.py   PDF drawing; `LabelPainter` callback draws each label's content
   render/proof.py   PNG proofs via pymupdf
-  config.py         contact / User-Agent
+  printing.py       lp command, PDF paper detection, fzf / kdialog file pickers
+  config.py         contact / User-Agent, printer
   cli.py            typer app (`mdl`)
   fetch/, models.py (planned)
 work/               per-album intermediate files (gitignored)
