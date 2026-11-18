@@ -46,7 +46,7 @@ def testsheet(
 def print_(
     pdf: Path | None = typer.Argument(None, exists=True, dir_okay=False, help="PDF to print. Omit to pick one."),
     gui: bool = typer.Option(False, "--gui", help="Pick the file in a desktop file dialog."),
-    printer: str | None = typer.Option(None, help="CUPS printer name. Default: config.PRINTER or the system default."),
+    printer: str | None = typer.Option(None, help="CUPS printer name. Default: $MD_LABELER_PRINTER or the system default."),
     copies: int = typer.Option(1, min=1),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show the lp command without printing."),
 ) -> None:
@@ -80,7 +80,7 @@ LABEL_PAGES = 2  # each batch of albums fills this many pages
 
 @app.command()
 def pick(
-    music_root: Path = typer.Option(config.MUSIC_ROOT, help="Library laid out as <root>/<artist>/<album>."),
+    music_root: Path = typer.Option(config.MUSIC_ROOT, help="Library laid out as <root>/<artist>/<album>. Default: $MD_LABELER_MUSIC_ROOT."),
     paper: Paper = Paper.LETTER,
     out: Path | None = typer.Option(None, help=f"Album list to write. Default: {SELECTIONS_DIR}/<date-time>.txt"),
     fetch: bool = typer.Option(True, help="Run the fetch stage on the selection afterwards."),

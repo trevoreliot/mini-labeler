@@ -31,13 +31,22 @@ git clone <this repo> && cd md-labeler
 uv sync
 ```
 
-Then edit `src/md_labeler/config.py`:
+Then set these environment variables, for example in your shell profile:
 
-| Setting      | What it's for                                                                                     |
-|--------------|---------------------------------------------------------------------------------------------------|
-| `CONTACT`    | Your email or URL. MusicBrainz requires contact info in every request and blocks anonymous clients. |
-| `MUSIC_ROOT` | Your library, laid out as `<root>/<artist>/<album>/<tracks>`.                                     |
-| `PRINTER`    | CUPS printer name, or `None` for the system default (`lpstat -d`).                                |
+```sh
+export MD_LABELER_CONTACT="https://github.com/<you>"   # or your email
+export MD_LABELER_MUSIC_ROOT="$HOME/Music"
+export MD_LABELER_PRINTER="My_Printer"                 # optional
+```
+
+| Variable                 | What it's for                                                                                         |
+|--------------------------|-------------------------------------------------------------------------------------------------------|
+| `MD_LABELER_CONTACT`     | Your email or URL. MusicBrainz requires contact info in every request and blocks anonymous clients. **Set this to your own.** |
+| `MD_LABELER_MUSIC_ROOT`  | Your library, laid out as `<root>/<artist>/<album>/<tracks>`. `~` is expanded.                        |
+| `MD_LABELER_PRINTER`     | CUPS printer name. If unset, the system default (`lpstat -d`) is used.                                |
+
+Unset or empty variables fall back to the defaults in `src/md_labeler/config.py`, which are
+the author's own settings.
 
 ### Check your printer's scaling first
 
@@ -88,7 +97,7 @@ runs `fetch`.
 
 | Option                       | Default                            | Description                                               |
 |------------------------------|------------------------------------|-----------------------------------------------------------|
-| `--music-root DIR`           | `config.MUSIC_ROOT`                | Library to browse (`<root>/<artist>/<album>`). Can also be changed in the window. |
+| `--music-root DIR`           | `$MD_LABELER_MUSIC_ROOT`           | Library to browse (`<root>/<artist>/<album>`). Can also be changed in the window. |
 | `--paper letter\|a4`         | `letter`                           | Sets the number of slots (8 / 9). Can also be changed in the window. |
 | `--out FILE`                 | `selections/<date-time>.txt`       | Where to write the album list.                            |
 | `--fetch` / `--no-fetch`     | `--fetch`                          | Run the fetch stage afterwards.                           |
@@ -140,7 +149,7 @@ Prints a sheet at true size. The paper size (Letter or A4) is read from the PDF 
 |-------------------|-----------------------------------------|---------------------------------------------------------------------|
 | `PDF`             | (opens a picker)                        | PDF to print. Without it, a searchable `fzf` list of `out/**/*.pdf` opens, newest first (or a numbered list if `fzf` isn't installed). |
 | `--gui`           | off                                     | Pick the file in a desktop dialog (`kdialog`, else `zenity`).       |
-| `--printer NAME`  | `config.PRINTER`, else system default   | CUPS printer.                                                       |
+| `--printer NAME`  | `$MD_LABELER_PRINTER`, else system default | CUPS printer.                                                       |
 | `--copies N`      | `1`                                     | Number of copies.                                                   |
 | `--dry-run`       | off                                     | Show the `lp` command without printing.                             |
 
@@ -301,7 +310,7 @@ The fonts may not be sold on their own.
 - **Online services.** Track lists come from [MusicBrainz](https://musicbrainz.org), whose core
   data is released under CC0. Cover images from the Cover Art Archive and iTunes remain under
   their owners' copyright, and Apple's iTunes Search API is subject to Apple's terms. Set your
-  own contact in `CONTACT` (see [Setup](#setup)); md-labeler limits requests to MusicBrainz's
+  own contact in `MD_LABELER_CONTACT` (see [Setup](#setup)); md-labeler limits requests to MusicBrainz's
   allowed rate and caches every response, so please don't remove those limits.
 - **No warranty.** md-labeler is provided "as is", without warranty of any kind; see the
   [license](LICENSE) for the full terms. Print results depend on your printer, paper and

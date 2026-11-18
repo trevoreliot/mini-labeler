@@ -95,7 +95,8 @@ their own and Claude can edit the files between stages.
    **tab** and the local album folder (`albumlist.py`). Blank lines and lines starting with `#`
    are ignored. Split on the **first** ` - ` (space-hyphen-space); album titles can themselves
    contain hyphens. Usually written by **`mdl pick`**: a Qt (PySide6) window over the user's library
-   (`config.MUSIC_ROOT` = `/mnt/ssd500/Media/Music`, laid out `<artist>/<album>/<tracks>`).
+   (`config.MUSIC_ROOT`: env `MD_LABELER_MUSIC_ROOT`, default `/mnt/ssd500/Media/Music`; laid
+   out `<artist>/<album>/<tracks>`).
    The user adds albums until the 2-page batch is full (8 Letter / 9 A4); the artist is the
    album folder's parent. The list goes to `selections/<date-time>.txt`, then fetch runs.
 2. **Fetch, local first** (`fetch/local.py`): for entries with a folder, read tags with
@@ -127,8 +128,8 @@ their own and Claude can edit the files between stages.
    - `fetch/http.py`: every response (and 404) is cached under `cache/`; `--refresh` ignores
      the cache. Per-host spacing (MusicBrainz 1.1 s, iTunes 3 s) and retries on 503/429,
      which MusicBrainz returns transiently under load. Always use `config.USER_AGENT`, which
-     carries the user's GitHub URL (`config.CONTACT`); MusicBrainz bans anonymous or over-fast
-     clients.
+     carries `config.CONTACT` (env `MD_LABELER_CONTACT`; the user's GitHub URL by default);
+     MusicBrainz bans anonymous or over-fast clients.
    - Track lists (`lookup_tracks`): browse the release group's releases (editions) and pick
      one (`choose_release`): Official first; then edition words from the user's title
      ("Deluxe", "Remastered", "Japanese"; `edition_words`) present, or none at all if the title
@@ -233,7 +234,8 @@ src/md_labeler/
   render/run.py     render stage: work dirs -> PDF + proofs
   style.py          Style (style.json), palette, contrast, default style
   printing.py       lp command, PDF paper detection, fzf / kdialog file pickers
-  config.py         contact / User-Agent, printer, music root
+  config.py         contact / User-Agent, music root, printer; env MD_LABELER_CONTACT,
+                    MD_LABELER_MUSIC_ROOT, MD_LABELER_PRINTER override the defaults
   cli.py            typer app (`mdl`)
   models.py         Album / Track (album.json), slugify
   albumlist.py      read/write the album list file
