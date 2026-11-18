@@ -1,6 +1,8 @@
-"""Fills gaps left by local files: cover art from the Cover Art Archive, then iTunes.
+"""Fills gaps left by local files: track lists from MusicBrainz, and cover art from the
+Cover Art Archive, then iTunes.
 
-The album is identified as a MusicBrainz release group (all editions of one album).
+The album is identified as a MusicBrainz release group (all editions of one album); track
+lists come from one release (a specific edition) in that group.
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from pathlib import Path
 from md_labeler.fetch.http import Http, NotFound
 from md_labeler.fetch.local import Cover, cover_from_bytes
 from md_labeler.geometry import art_px_needed
-from md_labeler.models import Album
+from md_labeler.models import Album, Track
 
 MB_API = "https://musicbrainz.org/ws/2"
 CAA_API = "https://coverartarchive.org"
@@ -24,15 +26,24 @@ MATCH = 0.9  # minimum title/artist similarity (0–1) to accept a match
 
 # Bracketed parts of a title that describe an edition rather than the album:
 # "(2 Vinyl, LP)", "[Remastered 2011]", "(Japanese Limited Edition)". "(Teal Album)" stays.
-EDITION = re.compile(
-    r"\s*[(\[][^)\]]*\b(edition|deluxe|remaster(ed)?|vinyl|lp|bonus|expanded|anniversary|japan(ese)?"
-    r"|limited|reissue|version|mono|stereo|disc|cd|explicit)\b[^)\]]*[)\]]",
-    re.IGNORECASE,
+_EDITION_WORDS = (
+    r"edition|deluxe|remaster(ed)?|vinyl|lp|bonus|expanded|anniversary|japan(ese)?"
+    r"|limited|reissue|version|mono|stereo|disc|cd|explicit|special"
 )
+EDITION = re.compile(rf"\s*[(\[][^)\]]*\b({_EDITION_WORDS})\b[^)\]]*[)\]]", re.IGNORECASE)
+# ...or a dash suffix: "Remain in Light - Deluxe", "OK Computer – Remastered".
+EDITION_SUFFIX = re.compile(rf"\s+[-–]\s+[^-–]*\b({_EDITION_WORDS})\b[^-–]*$", re.IGNORECASE)
 
 
 def clean_title(title: str) -> str:
-    return EDITION.sub("", title).strip() or title
+    return EDITION_SUFFIX.sub("", EDITION.sub("", title)).strip() or title
+
+
+def edition_words(title: str) -> set[str]:
+    """Edition words the user asked for in the title, e.g. {"deluxe"} for "X (Deluxe Edition)"."""
+    words = {m.group(0).lower() for m in re.finditer(rf"\b({_EDITION_WORDS})\b", title, re.IGNORECASE)}
+    words = {"remaster" if w.startswith("remaster") else "japan" if w.startswith("japan") else w for w in words}
+    return words - {"edition", "version", "cd", "lp", "disc"}  # too generic to tell editions apart
 
 
 def norm(text: str) -> str:
@@ -163,25 +174,34 @@ def itunes_front(http: Http, artist: str, title: str) -> Cover | None:
 # --- Stage -----------------------------------------------------------------------
 
 
+AMBIGUOUS = "ambiguous match, set release_group in album.json to pick one of candidates"
+
+
+def identify(album: Album, http: Http) -> tuple[str | None, str]:
+    """The album's release group ID (or None) and a note. Sets release_group/original_year,
+    or needs_review + candidates when the match is ambiguous."""
+    if album.release_group:  # pinned during curation, or found on an earlier run
+        album.needs_review, album.candidates = False, []
+        return album.release_group, "known release group"
+    match = choose_release_group(search_release_groups(http, album.artist, album.title), album.artist, album.title, album.year)
+    if match.ambiguous:
+        album.needs_review = True
+        album.candidates = [c.describe() for c in match.ambiguous[:8]]
+        return None, AMBIGUOUS
+    if match.best is None:
+        return None, "no MusicBrainz match"
+    album.release_group, album.original_year = match.best.id, match.best.year
+    return match.best.id, "matched"
+
+
 def lookup_art(album: Album, work_dir: Path, http: Http) -> str:
     """Try to replace missing or low-res art. Updates `album` and files in place.
 
     Returns a one-line summary of what happened.
     """
-    if album.release_group:  # pinned during curation, or found on an earlier run
-        rg, note = album.release_group, "pinned"
-        album.needs_review, album.candidates = False, []
-    else:
-        match = choose_release_group(search_release_groups(http, album.artist, album.title), album.artist, album.title, album.year)
-        if match.ambiguous:
-            album.needs_review = True
-            album.candidates = [c.describe() for c in match.ambiguous[:8]]
-            return f"ambiguous ({len(match.ambiguous)} candidates), set release_group in album.json to pick one"
-        rg, note = (match.best.id, "matched") if match.best else (None, "no MusicBrainz match")
-        if match.best:
-            album.release_group = rg
-            album.original_year = match.best.year
-
+    rg, note = identify(album, http)
+    if note == AMBIGUOUS:
+        return note
     cover = (caa_front(http, rg) if rg else None) or itunes_front(http, album.artist, album.title)
     if cover is None:
         return f"{note}; no online art found"
@@ -199,3 +219,107 @@ def lookup_art(album: Album, work_dir: Path, http: Http) -> str:
     if cover.px >= art_px_needed() and "art" in album.needs:
         album.needs.remove("art")
     return f"{note}; art {cover.px}px from {cover.source.split(':')[0]}"
+
+
+# --- Track lists -----------------------------------------------------------------
+
+AUDIO_FORMAT_RANK = (("cd", 3), ("digital", 2), ("vinyl", 1), ("cassette", 1))  # by substring of the medium format
+NON_AUDIO = re.compile(r"dvd|blu-ray|video|vhs|data", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class Release:
+    id: str
+    title: str
+    status: str | None
+    date: str | None
+    disambiguation: str
+    formats: tuple[str, ...]  # audio media only
+    track_count: int  # across audio media
+
+    def format_rank(self) -> int:
+        ranks = [next((r for key, r in AUDIO_FORMAT_RANK if key in f.lower()), 0) for f in self.formats]
+        return min(ranks) if ranks else 0
+
+
+def browse_releases(http: Http, release_group: str) -> list[Release]:
+    releases, offset = [], 0
+    while True:
+        data = http.get_json(f"{MB_API}/release", {"release-group": release_group, "inc": "media", "fmt": "json", "limit": 100, "offset": offset})
+        for r in data.get("releases", []):
+            audio = [m for m in r.get("media", []) if not NON_AUDIO.search(m.get("format") or "")]
+            releases.append(
+                Release(
+                    id=r["id"],
+                    title=r.get("title", ""),
+                    status=r.get("status"),
+                    date=r.get("date") or None,
+                    disambiguation=r.get("disambiguation") or "",
+                    formats=tuple(m.get("format") or "" for m in audio),
+                    track_count=sum(m.get("track-count", 0) for m in audio),
+                )
+            )
+        offset += len(data.get("releases", []))
+        if not data.get("releases") or offset >= data.get("release-count", 0):
+            return releases
+
+
+def choose_release(releases: list[Release], wanted: set[str], local_count: int | None) -> Release | None:
+    """The edition whose track list to use.
+
+    Official first; then the user's edition words ("deluxe") present, or absent if none were
+    asked for; then a track count matching the local files; then CD > digital > vinyl; then
+    the earliest date.
+    """
+    def edition_fit(r: Release) -> bool:
+        found = edition_words(f"{r.title} {r.disambiguation}")
+        return wanted <= found if wanted else not found
+
+    def key(r: Release) -> tuple:
+        return (
+            r.status == "Official",
+            edition_fit(r),
+            local_count is not None and r.track_count == local_count,
+            r.format_rank(),
+            r.track_count > 0,
+        )
+
+    usable = [r for r in releases if r.track_count > 0]
+    if not usable:
+        return None
+    top = max(key(r) for r in usable)
+    return min((r for r in usable if key(r) == top), key=lambda r: (r.date or "9999", r.id))
+
+
+def release_tracks(http: Http, release_id: str) -> list[Track]:
+    data = http.get_json(f"{MB_API}/release/{release_id}", {"inc": "recordings", "fmt": "json"})
+    tracks = []
+    audio = [m for m in data.get("media", []) if not NON_AUDIO.search(m.get("format") or "")]
+    for disc, medium in enumerate(audio, 1):
+        for t in medium.get("tracks", []):
+            ms = t.get("length") or (t.get("recording") or {}).get("length")
+            tracks.append(Track(number=t.get("position", len(tracks) + 1), title=t.get("title", ""), duration=ms / 1000 if ms else None, disc=disc))
+    return tracks
+
+
+def lookup_tracks(album: Album, http: Http) -> str:
+    """Replace missing or untrustworthy local track lists with a MusicBrainz release's."""
+    rg, note = identify(album, http)
+    if rg is None:
+        return f"{note}; no track list"
+    local = album.tracks
+    release = choose_release(browse_releases(http, rg), edition_words(album.title), len(local) or None)
+    if release is None:
+        return f"{note}; no release with a track list"
+    tracks = release_tracks(http, release.id)
+    if not tracks:
+        return f"{note}; release {release.id} has no tracks"
+    if len(local) == len(tracks):  # same edition as the files: keep their measured durations where MB has none
+        for mb, own in zip(tracks, local):
+            mb.duration = mb.duration or own.duration
+    album.tracks, album.mbid = tracks, release.id
+    album.tracks_source = f"musicbrainz:{release.id}"
+    if "tracks" in album.needs:
+        album.needs.remove("tracks")
+    kind = "/".join(dict.fromkeys(release.formats)) or "?"
+    return f"{note}; {len(tracks)} tracks from {release.date or '?'} {kind} release"

@@ -23,6 +23,7 @@ class Album:
     title: str
     year: str | None = None
     tracks: list[Track] = field(default_factory=list)
+    tracks_source: str = "local"  # "local" (tags / file names) or "musicbrainz:<release id>"
     folder: str | None = None  # local album folder the data came from
     mbid: str | None = None  # MusicBrainz release ID, once known
     release_group: str | None = None  # MusicBrainz release group ID; set it by hand to pin a match

@@ -108,7 +108,9 @@ their own and Claude can edit the files between stages.
    300 dpi). An existing `album.json` is kept unless `--force`, so curated edits survive.
    Library survey (Nov 2026): 530 albums; 78% have embedded art (only about 45% of those are
    ≥851 px); 98% have full title tags; there are no folder images.
-3. **Fetch, online** (`fetch/online.py`), only for albums whose `needs` contains `"art"`:
+3. **Fetch, online** (`fetch/online.py`), only for albums whose `needs` contains `"tracks"`
+   (typed-in entries with no folder, or untagged files) or `"art"`. Tracks are looked up first,
+   then art; both share one release-group match (`identify`).
    - Find the MusicBrainz **release group**: search, then rank candidates by title similarity
      (against the tag title and the title with edition notes like "(Japanese Limited Edition)"
      stripped; MB `disambiguation` counts as part of the title, e.g. Weezer "Teal Album"), then
@@ -127,8 +129,17 @@ their own and Claude can edit the files between stages.
      which MusicBrainz returns transiently under load. Always use `config.USER_AGENT`, which
      carries the user's GitHub URL (`config.CONTACT`); MusicBrainz bans anonymous or over-fast
      clients.
-   - Not built yet: track lists from MusicBrainz for albums with `"tracks"` in `needs`
-     (typed-in entries with no folder, or untagged files).
+   - Track lists (`lookup_tracks`): browse the release group's releases (editions) and pick
+     one (`choose_release`): Official first; then edition words from the user's title
+     ("Deluxe", "Remastered", "Japanese"; `edition_words`) present, or none at all if the title
+     has none; then a track count equal to the local files; then CD > digital > vinyl; then the
+     earliest date. DVD/video media are ignored. Writes `tracks` (disc = audio medium number),
+     `mbid` (the release) and `tracks_source: "musicbrainz:<id>"`; when the counts match the
+     local files, local durations fill any gaps. MusicBrainz titles carry the release's
+     own notes (e.g. "(2005 remastered album version)") and typographic apostrophes; **clean
+     them in curation.**
+   - `clean_title` strips bracketed edition notes and dash suffixes ("Remain in Light -
+     Deluxe") for matching.
    - Results on the first real batch (8 albums): 6 low-res covers were upgraded to
      1189–1425 px (5 from CAA, 1 from iTunes), and all 6 matches were correct.
 4. **Curate** (Claude Code does this. **No LLM API calls in the code.**): see below.

@@ -153,6 +153,111 @@ def test_ambiguous_match_flags_review_and_pinning_resolves_it(tmp_path):
 
     album.release_group = "green"  # what curation does
     http.calls.clear()
-    assert lookup_art(album, tmp_path, http).startswith("pinned")
+    assert lookup_art(album, tmp_path, http).startswith("known release group")
     assert not album.needs_review and album.art_px == 1200
     assert not any("musicbrainz" in c for c in http.calls)  # no search when pinned
+
+
+# --- Track lists ---------------------------------------------------------------
+
+from md_labeler.fetch.online import Release, choose_release, edition_words, lookup_tracks  # noqa: E402
+from md_labeler.models import Track  # noqa: E402
+
+
+def _release(id, date="2003", status="Official", formats=("CD",), count=13, title="Meteora", dis=""):
+    return Release(id, title, status, date, dis, formats, count)
+
+
+def _browse_json(releases):
+    return {
+        "release-count": len(releases),
+        "releases": [
+            {"id": r.id, "title": r.title, "status": r.status, "date": r.date, "disambiguation": r.disambiguation,
+             "media": [{"format": f, "track-count": r.track_count // len(r.formats)} for f in r.formats]}
+            for r in releases
+        ],
+    }
+
+
+def _release_json(titles_by_disc, formats=None):
+    media = []
+    for i, titles in enumerate(titles_by_disc):
+        media.append({"format": (formats or ["CD"] * len(titles_by_disc))[i],
+                      "tracks": [{"position": n, "title": t, "length": 200_000 + n} for n, t in enumerate(titles, 1)]})
+    return {"media": media}
+
+
+def test_edition_words():
+    assert clean_title("Remain in Light - Deluxe") == "Remain in Light"
+    assert edition_words("Abbey Road (Remastered 2009)") == {"remaster"}
+    assert edition_words("A Fever You Can't Sweat Out (Japanese Limited Edition)") == {"japan", "limited"}
+    assert edition_words("Meteora") == set()
+
+
+def test_choose_release_prefers_official_plain_cd_earliest():
+    releases = [
+        _release("boot", status="Bootleg", date="2002"),
+        _release("special", dis="special edition", date="2003-03-01"),
+        _release("vinyl", formats=("Vinyl", "Vinyl"), date="2003-03-01"),
+        _release("cd-late", date="2004"),
+        _release("cd", date="2003-03-25"),
+        _release("dvd-only", formats=(), count=0, date="2001"),
+    ]
+    assert choose_release(releases, set(), None).id == "cd"
+
+
+def test_choose_release_honours_requested_edition_and_local_count():
+    releases = [_release("std", date="2003"), _release("deluxe", title="Meteora (Deluxe)", count=20, date="2013")]
+    assert choose_release(releases, {"deluxe"}, None).id == "deluxe"
+    releases = [_release("us", date="2003", count=13), _release("jp", date="2003", count=14, dis="")]
+    assert choose_release(releases, set(), 14).id == "jp"  # matches the files the user has
+
+
+def test_lookup_tracks_fills_album_from_musicbrainz():
+    rgs = {f"{MB_API}/release-group/": {"release-groups": METEORA}}
+    browse = {f"{MB_API}/release": _browse_json([_release("cd"), _release("vinyl", formats=("Vinyl", "Vinyl"))])}
+    rel = {f"{MB_API}/release/cd": _release_json([["Foreword", "Don't Stay"], ["Bonus"]])}
+    album = Album("Linkin Park", "Meteora", needs=["tracks", "art"])
+    note = lookup_tracks(album, FakeHttp({**rgs, **browse, **rel}))
+    assert "3 tracks" in note and "CD" in note
+    assert [(t.disc, t.number, t.title) for t in album.tracks] == [(1, 1, "Foreword"), (1, 2, "Don't Stay"), (2, 1, "Bonus")]
+    assert album.tracks[0].duration == pytest.approx(200.001)
+    assert album.mbid == "cd" and album.tracks_source == "musicbrainz:cd"
+    assert album.needs == ["art"] and album.release_group == "album"
+
+
+def test_lookup_tracks_keeps_local_durations_when_counts_match():
+    rel = _release_json([["A", "B"]])
+    for t in rel["media"][0]["tracks"]:
+        t["length"] = None
+    http = FakeHttp({f"{MB_API}/release": _browse_json([_release("r", count=2)]), f"{MB_API}/release/r": rel})
+    album = Album("X", "Y", release_group="rg", tracks=[Track(1, "01 a", 61.0), Track(2, "02 b", 62.0)], needs=["tracks"])
+    lookup_tracks(album, http)
+    assert [(t.title, t.duration) for t in album.tracks] == [("A", 61.0), ("B", 62.0)]
+
+
+def test_lookup_tracks_ambiguous_leaves_album_alone():
+    weezer = [_rg(c, "Weezer", artist="Weezer", year=y) for c, y in (("blue", "1994"), ("green", "2001"))]
+    album = Album("Weezer", "Weezer", needs=["tracks"])
+    assert "ambiguous" in lookup_tracks(album, FakeHttp({f"{MB_API}/release-group/": {"release-groups": weezer}}))
+    assert album.needs == ["tracks"] and album.needs_review and album.tracks == []
+
+
+def test_fetch_entry_without_folder_gets_tracks_then_art(tmp_path):
+    from md_labeler.albumlist import AlbumEntry
+    from md_labeler.fetch import fetch_entry
+
+    http = FakeHttp(
+        {
+            f"{MB_API}/release-group/": {"release-groups": METEORA},
+            f"{MB_API}/release": _browse_json([_release("cd", count=2)]),
+            f"{MB_API}/release/cd": _release_json([["Foreword", "Don't Stay"]]),
+            **_caa("album", "img"),
+        },
+        {"img": _jpeg(1200)},
+    )
+    r = fetch_entry(AlbumEntry("Linkin Park", "Meteora"), work_dir=tmp_path, http=http)
+    assert [n.split(":")[0] for n in r.online] == ["tracks", "art"]
+    assert r.album.needs == [] and len(r.album.tracks) == 2 and r.album.art_px == 1200
+    assert sum("release-group/" in c and "musicbrainz" in c for c in http.calls) == 1  # identified once
+    assert (r.dir / "palette.json").exists()

@@ -101,10 +101,16 @@ Gathers metadata and cover art for every album in an album list into `work/<albu
 - **Local files first.** Tags give the artist, album, year, track and disc numbers, titles
   and durations (MP3, FLAC, M4A, OGG, WMA and more). Cover art comes from image files in the
   album folder or art embedded in the tracks, whichever is the best front cover.
-- **Online only for gaps.** If there's no art, or it's under 851 px (too soft for a 72 mm
-  label at 300 dpi), it looks the album up on MusicBrainz and downloads the cover from the
-  Cover Art Archive, falling back to iTunes. Your art is only replaced by a larger image, and
-  your original is kept as `cover-local.*`.
+- **Online only for gaps.** The album is matched on MusicBrainz, and then:
+  - **Track list**, when there are no local files (a typed-in entry) or their tags have no
+    titles: taken from one edition of the album. It prefers an official release, the edition
+    named in your title (e.g. "Remain in Light - Deluxe") or otherwise the standard one, a
+    track count matching your files, CD over digital over vinyl, and then the earliest date.
+  - **Cover art**, when there's none or it's under 851 px (too soft for a 72 mm label at
+    300 dpi): downloaded from the Cover Art Archive, falling back to iTunes. Your art is only
+    replaced by a larger image, and your original is kept as `cover-local.*`.
+  - If several albums match equally well (e.g. Weezer's many albums titled "Weezer"), nothing
+    is downloaded; the album is marked for review with a list of candidates.
 - Albums that already have an `album.json` are kept as they are, so curated edits survive
   re-runs. Online lookups for their missing art still run.
 
@@ -185,6 +191,7 @@ Useful `album.json` fields to edit:
 | `title`, `artist`, `tracks[].title` | What's printed. Clean up edition notes and typos here.                    |
 | `spine_text`    | Replaces "ARTIST · ALBUM" on both spines, when the default is too long or redundant.        |
 | `release_group` | Pins the MusicBrainz match. When `needs_review` is true, pick an ID from `candidates`, set it here, and run `fetch` again. |
+| `tracks_source` | `local`, or `musicbrainz:<release id>` when the track list came from MusicBrainz. |
 | `original_year` | First release year per MusicBrainz. It's printed instead of `year`, since tags often carry a reissue's year. |
 
 ### `style.json`

@@ -1,18 +1,19 @@
 """The fetch stage: album list -> work/<slug>/album.json + cover image.
 
-Local files are read first. Whatever they can't supply is recorded in `Album.needs`; missing
-or low-res art is then looked up online (Cover Art Archive, then iTunes).
+Local files are read first. Whatever they can't supply is recorded in `Album.needs`; then
+missing track lists come from MusicBrainz, and missing or low-res art from the Cover Art
+Archive or iTunes.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from md_labeler.albumlist import AlbumEntry
 from md_labeler.fetch.http import Http
 from md_labeler.fetch.local import is_album_folder, read_album
-from md_labeler.fetch.online import lookup_art
+from md_labeler.fetch.online import lookup_art, lookup_tracks
 from md_labeler.geometry import art_px_needed
 from md_labeler.models import Album, slugify
 from md_labeler.style import ensure_palette
@@ -26,17 +27,21 @@ class FetchResult:
     dir: Path
     album: Album
     skipped: bool  # album.json already existed and was kept
-    online: str | None = None  # summary of the online art lookup, if one ran
+    online: list[str] = field(default_factory=list)  # summaries of the online lookups that ran
 
 
 def fetch_entry(entry: AlbumEntry, work_dir: Path = WORK_DIR, force: bool = False, http: Http | None = None) -> FetchResult:
-    """Read local files into work/<slug>/, then look up art online if `http` is given."""
+    """Read local files into work/<slug>/, then fill gaps online if `http` is given."""
     result = _fetch_local(entry, work_dir, force)
-    if http and "art" in result.album.needs:
-        art_before = result.album.art_file, result.album.art_source
-        result.online = lookup_art(result.album, result.dir, http)
-        result.album.save(result.dir / "album.json")
-        if (result.album.art_file, result.album.art_source) != art_before:
+    album = result.album
+    if http and "tracks" in album.needs:
+        result.online.append("tracks: " + lookup_tracks(album, http))
+        album.save(result.dir / "album.json")
+    if http and "art" in album.needs and not album.needs_review:
+        art_before = album.art_file, album.art_source
+        result.online.append("art: " + lookup_art(album, result.dir, http))
+        album.save(result.dir / "album.json")
+        if (album.art_file, album.art_source) != art_before:
             (result.dir / "palette.json").unlink(missing_ok=True)
     ensure_palette(result.dir, result.album.art_file)  # for choosing the style during curation
     return result

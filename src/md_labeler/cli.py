@@ -124,8 +124,8 @@ def _fetch_all(entries: list[AlbumEntry], force: bool, offline: bool = False, re
         art = f"art {a.art_px}px ({a.art_source})" if a.art_file else "no art"
         state = f"{'kept existing, ' if r.skipped else ''}{len(a.tracks)} tracks, {art}"
         typer.echo(f"  {r.dir.name}: {state}")
-        if r.online:
-            typer.echo(f"      online: {r.online}")
+        for note in r.online:
+            typer.echo(f"      online {note}")
         if a.needs or a.needs_review:
             todo = [*a.needs, *(["review match"] if a.needs_review else [])]
             typer.echo(f"      still needs: {', '.join(todo)}")
