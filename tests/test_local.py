@@ -116,3 +116,11 @@ def test_scan_library_lists_only_album_folders(tmp_path):
     lib = scan_library(tmp_path)
     assert list(lib) == ["abba", "Zed"]
     assert [p.name for p in lib["Zed"]] == ["Two"]
+
+
+def test_strips_track_number_from_title_tags(tmp_path):
+    d = tmp_path / "A" / "B"
+    _mp3(d / "1.mp3", "01 - Son Et Lumiere", "1")
+    _mp3(d / "2.mp3", "1979", "2")  # a number that is the title, not the track number
+    album, _ = read_album(d, "A", "B")
+    assert [t.title for t in album.tracks] == ["Son Et Lumiere", "1979"]

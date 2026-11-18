@@ -15,6 +15,7 @@ from md_labeler.fetch.local import is_album_folder, read_album
 from md_labeler.fetch.online import lookup_art
 from md_labeler.geometry import art_px_needed
 from md_labeler.models import Album, slugify
+from md_labeler.style import ensure_palette
 
 WORK_DIR = Path("work")
 
@@ -32,8 +33,12 @@ def fetch_entry(entry: AlbumEntry, work_dir: Path = WORK_DIR, force: bool = Fals
     """Read local files into work/<slug>/, then look up art online if `http` is given."""
     result = _fetch_local(entry, work_dir, force)
     if http and "art" in result.album.needs:
+        art_before = result.album.art_file, result.album.art_source
         result.online = lookup_art(result.album, result.dir, http)
         result.album.save(result.dir / "album.json")
+        if (result.album.art_file, result.album.art_source) != art_before:
+            (result.dir / "palette.json").unlink(missing_ok=True)
+    ensure_palette(result.dir, result.album.art_file)  # for choosing the style during curation
     return result
 
 
@@ -49,7 +54,7 @@ def _fetch_local(entry: AlbumEntry, work_dir: Path, force: bool) -> FetchResult:
     else:
         album, cover = Album(artist=entry.artist, title=entry.album, needs=["tracks"]), None
 
-    for old in (*out.glob("cover.*"), *out.glob("cover-local.*")):
+    for old in (*out.glob("cover.*"), *out.glob("cover-local.*"), *out.glob("palette.json")):
         old.unlink()
     if cover:
         album.art_file = f"cover{cover.ext}"

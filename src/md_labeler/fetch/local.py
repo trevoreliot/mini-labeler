@@ -100,6 +100,12 @@ def _title_from_filename(path: Path) -> str:
     return re.sub(r"^\s*\d+\s*[-._)]?\s*", "", path.stem).strip() or path.stem
 
 
+def _strip_number(title: str, number: int) -> str:
+    """Drop a leading track number some taggers put in the title: "01 - Son Et Lumiere"."""
+    m = re.match(r"^\s*0*(\d+)\s*[-._)]\s*(.+)$", title)
+    return m.group(2).strip() if m and int(m.group(1)) == number else title
+
+
 def _mode(values: list[str | None]) -> str | None:
     present = [v for v in values if v]
     return max(set(present), key=present.count) if present else None
@@ -191,7 +197,9 @@ def read_album(folder: Path, artist_hint: str, album_hint: str) -> tuple[Album, 
 
     tracks = []
     for i, (f, t) in enumerate(zip(files, tags), 1):
-        tracks.append(Track(number=t.track or i, title=t.title or _title_from_filename(f), duration=t.length, disc=t.disc or 1))
+        number = t.track or i
+        title = _strip_number(t.title, number) if t.title else _title_from_filename(f)
+        tracks.append(Track(number=number, title=title, duration=t.length, disc=t.disc or 1))
     tracks.sort(key=lambda t: (t.disc, t.number))
 
     album = Album(

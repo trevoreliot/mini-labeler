@@ -132,8 +132,24 @@ their own and Claude can edit the files between stages.
    - Results on the first real batch (8 albums): 6 low-res covers were upgraded to
      1189–1425 px (5 from CAA, 1 from iTunes), and all 6 matches were correct.
 4. **Curate** (Claude Code does this. **No LLM API calls in the code.**): see below.
-5. **Render** (`mdl render`): reads `album.json`, `style.json` and `cover.jpg`, and writes
-   `out/<run>/labels.pdf` and `out/<run>/proof-*.png`.
+5. **Render** (`mdl render [LIST]`, `render/run.py` + `render/labels.py`): for the newest
+   (or given) album list, reads each `work/<slug>/` (`album.json`, `cover.*`, `style.json`) and
+   writes `out/<list name>/labels.pdf` + `labels-proof-N.png`. Paper comes from the list's
+   `# paper:` line (written by `mdl pick`). Albums without `style.json` get
+   `style.default_style(palette)`, a readable style from the cover's colours. It prints
+   warnings per album (squeezed/shortened text, small track list, low-res art, contrast,
+   needs_review); **fix them in curation, not by changing code.**
+   - Disc: cover cropped to fill the bleed box (`disc_focus` picks the horizontal crop).
+   - Slipcase front: `fit-left`/`fit-right` puts the whole square cover (52 mm) on one side and
+     the title and artist · year in a rotated panel on the other; `fill` crops the cover to
+     70×50 (`front_focus` picks the vertical crop).
+   - Slipcase back: title, artist · year · total time, a rule, then the track list. Type size
+     ranges 7–4.5 pt across 1–3 balanced columns; an extra column must gain ≥1 pt. Titles squeeze
+     to 85% before being shortened with "…". Multi-disc albums get "DISC n" headings.
+   - Spines: "ARTIST · ALBUM" (separator in the accent colour), or `spine_text`; 7.5–5 pt, then
+     squeezed to 80%, then shortened (with a warning).
+   - Art is cropped and resampled to exactly 300 dpi and embedded as JPEG (q92, 4:4:4). The
+     first batch's PDF was 2.1 MB.
 6. **Proof**: Claude views the PNG proofs and checks for overflow, low contrast, bad crops,
    and a chamfer on the wrong corner.
 
@@ -151,7 +167,20 @@ After `fetch`, for every album without a `style.json` (or that has `needs_review
 - If the track list will not fit the 70×50 back at a legible size (minimum about 5 pt), plan
   two columns, drop durations, or both, and record that in the style.
 
-**Styling** (write `style.json`, validated by a schema in the code):
+**Styling** (write `style.json`; fields and checks in `style.Style`, `Style.problems()`):
+```json
+{"bg": "#111111", "fg": "#f0f0f0", "accent": "#d4a017",
+ "spine_font": "BarlowCondensed-SemiBold", "title_font": "BarlowCondensed-Bold",
+ "text_font": "IBMPlexSansCondensed-Regular", "uppercase": true, "separator": "·",
+ "front": "fit-left", "front_focus": 0.5, "disc_focus": 0.5,
+ "numbering": "01", "durations": true, "columns": 0}
+```
+Fonts are TTF file stems under `assets/fonts/`. Bundled (OFL, from google/fonts):
+BarlowCondensed (Regular/Medium/SemiBold/Bold/ExtraBold), IBMPlexSansCondensed (Regular/Italic/
+Medium/SemiBold/Bold), BebasNeue-Regular (caps only), CrimsonText (Regular/Italic/SemiBold/Bold),
+SpaceMono (Regular/Bold). Use static TTFs only: reportlab can't use variable fonts' axes.
+`palette.json` (written by fetch, or by render if missing) lists dominant colours with their
+share of the cover, plus the average `edge` colour, which blends well as the front panel `bg`.
 - Use `palette.json`, the cover art itself (Claude can view `cover.jpg`), and genre/era
   context to choose: the spine background and text colours, the font family and weight (only
   from `assets/fonts/`), case (upper/title), the separator glyph, and the track-list layout
@@ -165,20 +194,24 @@ uv run mdl testsheet [--paper letter|a4] [--pages 2 | --albums N]  # placeholder
 uv run mdl print [FILE] [--gui] [--dry-run]  # true-size print; no FILE = fzf picker over out/*.pdf
 uv run mdl pick [--paper a4] [--music-root DIR] [--no-fetch]  # album picker window -> selections/*.txt -> fetch
 uv run mdl fetch LIST [--force] [--offline] [--refresh]  # local tags/art, then CAA/iTunes for missing/low-res art
+uv run mdl render [LIST] [--paper] [--guides]  # labels -> out/<list>/labels.pdf + proofs
 uv run pytest
-# planned:
-uv run mdl render [--paper letter|a4]  # PDF + PNG proofs -> out/
 ```
 
 ## Repo layout
 ```
 assets/templates/   reference PDFs (read-only)
-assets/fonts/       bundled OFL fonts (planned)
+assets/fonts/       bundled OFL fonts (one folder per family, with OFL.txt)
 src/md_labeler/
   geometry.py       all mm dimensions, label specs, outline paths
   layout.py         SheetConfig, packing labels onto pages
   render/sheet.py   PDF drawing; `LabelPainter` callback draws each label's content
   render/proof.py   PNG proofs via pymupdf
+  render/labels.py  painters for disc, front, back, spines (AlbumContext collects warnings)
+  render/text.py    font registration, fit (shrink → squeeze → ellipsis), drawing runs
+  render/art.py     crop + resample cover to 300 dpi JPEG
+  render/run.py     render stage: work dirs -> PDF + proofs
+  style.py          Style (style.json), palette, contrast, default style
   printing.py       lp command, PDF paper detection, fzf / kdialog file pickers
   config.py         contact / User-Agent, printer, music root
   cli.py            typer app (`mdl`)

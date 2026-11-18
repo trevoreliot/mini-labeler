@@ -8,11 +8,12 @@ from pathlib import Path
 import typer
 
 from md_labeler import config
-from md_labeler.albumlist import AlbumEntry, read_album_list, write_album_list
+from md_labeler.albumlist import AlbumEntry, read_album_list, read_paper, write_album_list
 from md_labeler.fetch import WORK_DIR, fetch_entry
 from md_labeler.fetch.http import Http
 from md_labeler.geometry import Paper
 from md_labeler.layout import SheetConfig, album_requests, capacity, pack
+from md_labeler.models import slugify
 from md_labeler.printing import OUT_DIR, default_printer, find_pdfs, lp_command, pdf_info, pick_gui, pick_terminal
 from md_labeler.render.proof import write_proofs
 from md_labeler.render.sheet import render_pdf
@@ -95,7 +96,7 @@ def pick(
         raise typer.Exit(1)
     entries, paper = result
     out = out or SELECTIONS_DIR / f"{datetime.now():%Y-%m-%d-%H%M%S}.txt"
-    write_album_list(out, entries)
+    write_album_list(out, entries, paper.value)
     typer.echo(f"{len(entries)} album(s), {paper.value}: {out}")
     for e in entries:
         typer.echo(f"  {e.artist} - {e.album}")
@@ -128,3 +129,36 @@ def _fetch_all(entries: list[AlbumEntry], force: bool, offline: bool = False, re
         if a.needs or a.needs_review:
             todo = [*a.needs, *(["review match"] if a.needs_review else [])]
             typer.echo(f"      still needs: {', '.join(todo)}")
+
+
+@app.command()
+def render(
+    selection: Path | None = typer.Argument(None, exists=True, dir_okay=False, help=f"Album list. Default: newest in {SELECTIONS_DIR}/."),
+    paper: Paper | None = typer.Option(None, help="Default: the paper recorded in the list, else letter."),
+    guides: bool = typer.Option(False, help="Also draw cut/bleed/safe outlines (for checking, not printing)."),
+    out: Path | None = typer.Option(None, help=f"PDF to write. Default: {OUT_DIR}/<list name>/labels.pdf"),
+) -> None:
+    """Lay out and draw every label for the albums in a list, from their work/ folders."""
+    from md_labeler.render.run import render_albums
+
+    if selection is None:
+        lists = sorted(SELECTIONS_DIR.glob("*.txt"), key=lambda p: p.stat().st_mtime)
+        if not lists:
+            raise typer.BadParameter(f"no album lists in {SELECTIONS_DIR}/; run `mdl pick` or pass a list")
+        selection = lists[-1]
+    entries = read_album_list(selection)
+    dirs = [WORK_DIR / slugify(e.artist, e.album) for e in entries]
+    missing = [d.name for d in dirs if not (d / "album.json").exists()]
+    if missing:
+        raise typer.BadParameter(f"not fetched yet: {', '.join(missing)}; run `mdl fetch {selection}`")
+    paper = paper or Paper(read_paper(selection) or Paper.LETTER.value)
+    out = out or OUT_DIR / selection.stem / "labels.pdf"
+
+    pdf, proofs, albums = render_albums(dirs, SheetConfig(paper=paper), out, guides)
+    typer.echo(f"{pdf}  ({len(albums)} albums, {paper.value}, {len(proofs)} page(s))")
+    typer.echo(f"proofs: {', '.join(map(str, proofs))}")
+    for a in albums:
+        flags = "" if a.styled else "  [default style: no style.json yet]"
+        typer.echo(f"  {a.dir.name}{flags}")
+        for w in a.ctx.warnings:
+            typer.echo(f"      ! {w}")
