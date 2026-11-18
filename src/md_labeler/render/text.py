@@ -60,7 +60,7 @@ def fit(text: str, font: str, max_w: float, max_pt: float, min_pt: float) -> Fit
 
 
 def ellipsize(text: str, font: str, size: float, hscale: float, max_w: float) -> str:
-    if width_mm(text, font, size, hscale) <= max_w:
+    if width_mm(text, font, size, hscale) <= max_w + 1e-6:  # a squeeze computed to fit exactly must fit
         return text
     while text and width_mm(text.rstrip() + ELLIPSIS, font, size, hscale) > max_w:
         text = text[:-1]

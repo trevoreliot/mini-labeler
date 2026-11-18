@@ -94,3 +94,12 @@ def test_unknown_font_stops_render(tmp_path):
     d = _work(tmp_path, "x", style=Style(title_font="Nope"))
     with pytest.raises(ValueError, match="unknown fonts"):
         render_albums([d], SheetConfig(), tmp_path / "o.pdf")
+
+
+def test_exact_squeeze_does_not_shorten():
+    from md_labeler.render.text import ellipsize
+
+    font, text, size = "IBMPlexSansCondensed-Regular", "There's A Good Reason These Tables Are Numbered Honey", 5.25
+    room = width_mm(text, font, size) * 0.87
+    hscale = room / width_mm(text, font, size)
+    assert ellipsize(text, font, size, hscale, room) == text

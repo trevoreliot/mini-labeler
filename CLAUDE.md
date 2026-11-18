@@ -167,6 +167,15 @@ After `fetch`, for every album without a `style.json` (or that has `needs_review
 - If the track list will not fit the 70×50 back at a legible size (minimum about 5 pt), plan
   two columns, drop durations, or both, and record that in the style.
 
+**Art choice**: when `cover-local.*` is better than the downloaded `cover.*` (e.g. a washed-out
+CAA scan; the first batch's Angles), rename `cover.*` → `cover-caa.*` and `cover-local.*` →
+`cover.*`, set `art_file`/`art_source`/`art_px` to the local image, remove `"art"` from `needs`
+(so fetch won't replace it again), and delete `palette.json` so it is regenerated. A 500 px
+cover prints at about 240 dpi on the 52 mm front art, which is acceptable when its colours are
+right.
+**Disc crop**: the square cover loses 30% of its width on the 37×54 disc. Set `disc_focus` so
+the main subject survives; text across the full width (e.g. Meteora's) can't be kept.
+
 **Styling** (write `style.json`; fields and checks in `style.Style`, `Style.problems()`):
 ```json
 {"bg": "#111111", "fg": "#f0f0f0", "accent": "#d4a017",
