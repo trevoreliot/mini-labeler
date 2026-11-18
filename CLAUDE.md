@@ -259,3 +259,7 @@ tests/
   printer-safe page margin (default 6 mm).
 - Data models (album, track, style) are dataclasses or pydantic, round-tripped through JSON.
 - Do not commit fetched cover art or generated output. They are copyrighted, for personal use.
+- Licensed **GPL-3.0-or-later** (`LICENSE`), because mutagen is GPL-2.0-or-later and PyMuPDF
+  is AGPL-3.0. New dependencies must be GPL-3.0-compatible: MIT/BSD/Apache-2.0/LGPL/GPL-3.0/
+  AGPL-3.0 are fine; GPL-2.0-only and proprietary are not. Bundled fonts must be OFL (or
+  similarly free) with their license file kept beside them.

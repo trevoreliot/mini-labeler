@@ -5,6 +5,9 @@ description = "Print-ready MiniDisc disc, slipcase and spine labels"
 authors = [
     { name = "Trevor" }
 ]
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28.1",

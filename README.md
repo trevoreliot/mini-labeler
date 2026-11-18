@@ -274,3 +274,36 @@ uv run pytest
 ```
 
 Design notes, label geometry, pipeline details and curation rules are in `CLAUDE.md`.
+
+## License
+
+md-labeler is free software, licensed under the
+[GNU General Public License v3.0 or later](LICENSE) (`GPL-3.0-or-later`). This matches its
+copyleft dependencies: [mutagen](https://github.com/quodlibet/mutagen) is GPL-2.0-or-later,
+and [PyMuPDF](https://github.com/pymupdf/PyMuPDF) is AGPL-3.0. The other dependencies
+(reportlab, Pillow, httpx, typer, PySide6) are under permissive or LGPL licenses.
+
+The fonts in `assets/fonts/` are not covered by the GPL. They are under the
+[SIL Open Font License 1.1](https://openfontlicense.org), with each family's license and
+copyright notice in its `OFL.txt`. Keep those files with the fonts if you redistribute them.
+The fonts may not be sold on their own.
+
+## Disclaimers
+
+- **No affiliation.** MiniDisc is a trademark of Sony Group Corporation. This project is not
+  affiliated with or endorsed by Sony, the MetaBrainz Foundation (MusicBrainz), the Internet
+  Archive or the Cover Art Archive, Apple (iTunes), or any artist or record label.
+- **Album art and names belong to their owners.** Cover art, album and track titles, and band
+  logos are copyrighted or trademarked by their respective owners. md-labeler is intended for
+  making labels, for personal use, for recordings you own. Don't sell or distribute labels
+  made with other people's artwork. This repository contains no cover art: fetched images stay
+  in your local `work/` and `cache/` folders, which are not tracked in git.
+- **Online services.** Track lists come from [MusicBrainz](https://musicbrainz.org), whose core
+  data is released under CC0. Cover images from the Cover Art Archive and iTunes remain under
+  their owners' copyright, and Apple's iTunes Search API is subject to Apple's terms. Set your
+  own contact in `CONTACT` (see [Setup](#setup)); md-labeler limits requests to MusicBrainz's
+  allowed rate and caches every response, so please don't remove those limits.
+- **No warranty.** md-labeler is provided "as is", without warranty of any kind; see the
+  [license](LICENSE) for the full terms. Print results depend on your printer, paper and
+  settings. Print `mdl testsheet` and check its 100 mm ruler before using your good sticker
+  paper.
