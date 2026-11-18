@@ -125,7 +125,7 @@ their own and Claude can edit the files between stages.
    - `fetch/http.py`: every response (and 404) is cached under `cache/`; `--refresh` ignores
      the cache. Per-host spacing (MusicBrainz 1.1 s, iTunes 3 s) and retries on 503/429,
      which MusicBrainz returns transiently under load. Always use `config.USER_AGENT`, which
-     carries the user's email (`config.CONTACT`); MusicBrainz bans anonymous or over-fast
+     carries the user's GitHub URL (`config.CONTACT`); MusicBrainz bans anonymous or over-fast
      clients.
    - Not built yet: track lists from MusicBrainz for albums with `"tracks"` in `needs`
      (typed-in entries with no folder, or untagged files).
