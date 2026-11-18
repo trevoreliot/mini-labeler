@@ -70,8 +70,10 @@ The user prints on **blank sticker paper and cuts by hand**, so we own the sheet
 CUPS defaults to `print-scaling=auto`, which shrinks a full-size page to the printable area
 by about 3%, even with "Actual size" selected in Okular. `mdl print` (in `printing.py`) runs
 `lp -o media=<paper> -o print-scaling=none -o fit-to-page=false`, reading the paper size from
-the PDF itself. With this, the 100 mm ruler measures true and no scale correction is needed. Don't add a
-calibration factor to fix scaling problems; check the print path first.
+the PDF itself. With this, the 100 mm ruler measures true and no scale correction is needed.
+Don't add a calibration factor to fix scaling problems; check the print path first.
+`--gray` adds `print-color-mode=monochrome` and `ColorModel=Gray` (the G600 lists both as
+supported) for cheap proofs on plain paper before using vinyl sticker paper.
 
 ## Tech stack
 Python ≥3.12, managed with **uv** (`uv run`, `uv add`). Chosen libraries:
@@ -212,7 +214,7 @@ share of the cover, plus the average `edge` colour, which blends well as the fro
 ## Commands
 ```
 uv run mdl testsheet [--paper letter|a4] [--pages 2 | --albums N]  # placeholder labels + guides -> out/testsheet.pdf
-uv run mdl print [FILE] [--gui] [--dry-run]  # true-size print; no FILE = fzf picker over out/*.pdf
+uv run mdl print [FILE] [--gui] [--gray] [--dry-run]  # true-size print; no FILE = fzf picker; --gray = plain-paper proof
 uv run mdl pick [--paper a4] [--music-root DIR] [--no-fetch]  # album picker window -> selections/*.txt -> fetch
 uv run mdl fetch LIST [--force] [--offline] [--refresh]  # local tags/art, then CAA/iTunes for missing/low-res art
 uv run mdl render [LIST] [--paper] [--guides]  # labels -> out/<list>/labels.pdf + proofs

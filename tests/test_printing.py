@@ -45,3 +45,11 @@ def test_print_dry_run_reads_paper_from_pdf(tmp_path):
     assert result.exit_code == 0, result.output
     assert "media=A4" in result.output
     assert "print-scaling=none" in result.output
+
+
+def test_gray_adds_monochrome_options(tmp_path):
+    color = lp_command(tmp_path / "s.pdf", Paper.LETTER)
+    gray = lp_command(tmp_path / "s.pdf", Paper.LETTER, gray=True)
+    assert "print-color-mode=monochrome" not in color
+    assert {"print-color-mode=monochrome", "ColorModel=Gray"} <= set(gray)
+    assert "print-scaling=none" in gray and gray[-2:] == color[-2:]  # still true size, same file

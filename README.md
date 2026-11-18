@@ -81,7 +81,9 @@ uv run mdl print      # 4. pick the PDF and print at true size
 3. **Render.** Writes `labels.pdf` and a PNG preview per page, and lists warnings per album,
    such as text that had to be squeezed or shortened, low-res art, or poor contrast. Fix those
    in curation and render again.
-4. **Print**, then cut along the crop marks.
+4. **Print**, then cut along the crop marks. Before using expensive sticker paper (vinyl,
+   glossy), print a grayscale proof on plain paper with `uv run mdl print --gray`, then
+   measure the ruler and labels and check the text and crops.
 
 You can also skip the picker and write an album list yourself (see [Album list](#album-list)),
 then run `uv run mdl fetch mylist.txt`.
@@ -151,6 +153,7 @@ Prints a sheet at true size. The paper size (Letter or A4) is read from the PDF 
 | `--gui`           | off                                     | Pick the file in a desktop dialog (`kdialog`, else `zenity`).       |
 | `--printer NAME`  | `$MD_LABELER_PRINTER`, else system default | CUPS printer.                                                       |
 | `--copies N`      | `1`                                     | Number of copies.                                                   |
+| `--gray`          | off                                     | Print in grayscale: a cheap proof on plain paper (see below).       |
 | `--dry-run`       | off                                     | Show the `lp` command without printing.                             |
 
 ### `mdl testsheet`

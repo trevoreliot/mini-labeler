@@ -61,7 +61,12 @@ def default_printer() -> str | None:
     return name.strip() or None
 
 
-def lp_command(pdf: Path, paper: Paper, printer: str | None = None, copies: int = 1) -> list[str]:
+# Grayscale, for proofs on plain paper. print-color-mode is standard IPP; ColorModel is the
+# usual PPD option (the G600 driver's). Printers ignore options they don't know.
+GRAY_OPTIONS = ("print-color-mode=monochrome", "ColorModel=Gray")
+
+
+def lp_command(pdf: Path, paper: Paper, printer: str | None = None, copies: int = 1, gray: bool = False) -> list[str]:
     """The `lp` invocation that prints at true size.
 
     CUPS defaults to print-scaling=auto, which shrinks a full-size page to the printer's
@@ -71,6 +76,9 @@ def lp_command(pdf: Path, paper: Paper, printer: str | None = None, copies: int 
     if printer:
         cmd += ["-d", printer]
     cmd += ["-o", f"media={CUPS_MEDIA[paper]}", "-o", "print-scaling=none", "-o", "fit-to-page=false"]
+    if gray:
+        for opt in GRAY_OPTIONS:
+            cmd += ["-o", opt]
     if copies > 1:
         cmd += ["-n", str(copies)]
     return [*cmd, "--", str(pdf)]

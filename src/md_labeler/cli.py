@@ -48,6 +48,9 @@ def print_(
     gui: bool = typer.Option(False, "--gui", help="Pick the file in a desktop file dialog."),
     printer: str | None = typer.Option(None, help="CUPS printer name. Default: $MD_LABELER_PRINTER or the system default."),
     copies: int = typer.Option(1, min=1),
+    gray: bool = typer.Option(
+        False, "--gray", help="Print in grayscale: a cheap proof on plain paper to measure and check before using sticker paper."
+    ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show the lp command without printing."),
 ) -> None:
     """Print a sheet at true size (no CUPS auto-scaling). Paper size is read from the PDF."""
@@ -65,8 +68,8 @@ def print_(
     info = pdf_info(pdf)
     if info.paper is None:
         raise typer.BadParameter(f"{pdf} is not a Letter or A4 page; refusing to guess the paper size")
-    cmd = lp_command(pdf, info.paper, printer or default_printer(), copies)
-    typer.echo(f"{pdf}: {info.paper.value}, {info.pages} page(s)")
+    cmd = lp_command(pdf, info.paper, printer or default_printer(), copies, gray)
+    typer.echo(f"{pdf}: {info.paper.value}, {info.pages} page(s){', grayscale proof' if gray else ''}")
     typer.echo(" ".join(shlex.quote(c) for c in cmd))
     if dry_run:
         return
