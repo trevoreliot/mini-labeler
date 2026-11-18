@@ -10,6 +10,7 @@ import typer
 from md_labeler import config
 from md_labeler.albumlist import AlbumEntry, read_album_list, write_album_list
 from md_labeler.fetch import WORK_DIR, fetch_entry
+from md_labeler.fetch.http import Http
 from md_labeler.geometry import Paper
 from md_labeler.layout import SheetConfig, album_requests, capacity, pack
 from md_labeler.printing import OUT_DIR, default_printer, find_pdfs, lp_command, pdf_info, pick_gui, pick_terminal
@@ -82,6 +83,7 @@ def pick(
     paper: Paper = Paper.LETTER,
     out: Path | None = typer.Option(None, help=f"Album list to write. Default: {SELECTIONS_DIR}/<date-time>.txt"),
     fetch: bool = typer.Option(True, help="Run the fetch stage on the selection afterwards."),
+    offline: bool = typer.Option(False, help="Use local files only; no MusicBrainz / Cover Art Archive."),
 ) -> None:
     """Choose albums in a window until the label sheets are full, then fetch them."""
     from md_labeler.picker import pick_albums  # Qt is only needed here
@@ -98,24 +100,31 @@ def pick(
     for e in entries:
         typer.echo(f"  {e.artist} - {e.album}")
     if fetch:
-        _fetch_all(entries, force=False)
+        _fetch_all(entries, force=False, offline=offline)
 
 
 @app.command("fetch")
 def fetch_cmd(
     album_list: Path = typer.Argument(..., exists=True, dir_okay=False, help="Album list (one 'Artist - Album' per line)."),
     force: bool = typer.Option(False, help="Re-read albums that already have an album.json (discards curated edits)."),
+    offline: bool = typer.Option(False, help="Use local files only; no MusicBrainz / Cover Art Archive."),
+    refresh: bool = typer.Option(False, help="Ignore cached HTTP responses."),
 ) -> None:
-    """Gather metadata and cover art into work/<album>/, from local files where possible."""
-    _fetch_all(read_album_list(album_list), force)
+    """Gather metadata and cover art into work/<album>/: local files first, then online for missing/low-res art."""
+    _fetch_all(read_album_list(album_list), force, offline, refresh)
 
 
-def _fetch_all(entries: list[AlbumEntry], force: bool) -> None:
-    typer.echo(f"\nFetching into {WORK_DIR}/:")
+def _fetch_all(entries: list[AlbumEntry], force: bool, offline: bool = False, refresh: bool = False) -> None:
+    http = None if offline else Http(refresh=refresh)
+    typer.echo(f"\nFetching into {WORK_DIR}/{' (offline)' if offline else ''}:")
     for entry in entries:
-        r = fetch_entry(entry, force=force)
+        r = fetch_entry(entry, force=force, http=http)
         a = r.album
         art = f"art {a.art_px}px ({a.art_source})" if a.art_file else "no art"
-        state = "kept existing" if r.skipped else f"{len(a.tracks)} tracks, {art}"
-        needs = f"  -> needs from MusicBrainz: {', '.join(a.needs)}" if a.needs else ""
-        typer.echo(f"  {r.dir.name}: {state}{needs}")
+        state = f"{'kept existing, ' if r.skipped else ''}{len(a.tracks)} tracks, {art}"
+        typer.echo(f"  {r.dir.name}: {state}")
+        if r.online:
+            typer.echo(f"      online: {r.online}")
+        if a.needs or a.needs_review:
+            todo = [*a.needs, *(["review match"] if a.needs_review else [])]
+            typer.echo(f"      still needs: {', '.join(todo)}")

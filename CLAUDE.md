@@ -108,20 +108,29 @@ their own and Claude can edit the files between stages.
    300 dpi). An existing `album.json` is kept unless `--force`, so curated edits survive.
    Library survey (Nov 2026): 530 albums; 78% have embedded art (only about 45% of those are
    ≥851 px); 98% have full title tags; there are no folder images.
-3. **Fetch, MusicBrainz** (not built yet), only for albums with `needs`: search MusicBrainz for the release group, then choose a
-   release. Prefer the original CD issue, then vinyl, and avoid deluxe or remaster editions
-   unless the user requested one. Writes `album.json` (artist, title, year, release MBID,
-   tracks with numbers, titles and durations, plus disc/side breaks for multi-disc or vinyl
-   releases) and `cover.jpg` from the **Cover Art Archive** (`front` image, largest size).
-   Fallback for missing art: **iTunes Search API** (no key; change the `100x100bb` artwork
-   URL to `3000x3000bb`). Also writes `palette.json`. Cache all HTTP responses under
-   `cache/`.
-   - MusicBrainz rules: **1 request/second maximum**, and a descriptive `User-Agent`
-     including contact info. Use `config.USER_AGENT`, which carries the user's email
-     (`config.CONTACT`). Breaking these gets the
-     user IP-banned.
-   - If the match is ambiguous or poor, still write `album.json` but add `"needs_review": true`
-     and the candidate release IDs, rather than guessing silently.
+3. **Fetch, online** (`fetch/online.py`), only for albums whose `needs` contains `"art"`:
+   - Find the MusicBrainz **release group**: search, then rank candidates by title similarity
+     (against the tag title and the title with edition notes like "(Japanese Limited Edition)"
+     stripped; MB `disambiguation` counts as part of the title, e.g. Weezer "Teal Album"), then
+     Album over Single/EP, then no secondary types (Live/Compilation/Remix). The tag year only
+     breaks ties, since tags often carry a reissue's year. Remaining ties → `needs_review: true`
+     plus `candidates`; no art is downloaded. **To resolve: set `release_group` in album.json and
+     re-run fetch** (a pinned group skips the search). Records `release_group` and
+     `original_year` (use it over the tag year for display).
+   - Art: Cover Art Archive front image at 1200 px, else **iTunes Search** (artwork URL
+     `100x100bb` → `1200x1200bb`, matched on artist/album similarity). Replaces local art only
+     if larger; the local original is kept as `cover-local.*`. **During curation, compare
+     `cover-local.*` with `cover.*`** to catch wrong matches or off-colour scans, and swap back
+     if the local one is better.
+   - `fetch/http.py`: every response (and 404) is cached under `cache/`; `--refresh` ignores
+     the cache. Per-host spacing (MusicBrainz 1.1 s, iTunes 3 s) and retries on 503/429,
+     which MusicBrainz returns transiently under load. Always use `config.USER_AGENT`, which
+     carries the user's email (`config.CONTACT`); MusicBrainz bans anonymous or over-fast
+     clients.
+   - Not built yet: track lists from MusicBrainz for albums with `"tracks"` in `needs`
+     (typed-in entries with no folder, or untagged files).
+   - Results on the first real batch (8 albums): 6 low-res covers were upgraded to
+     1189–1425 px (5 from CAA, 1 from iTunes), and all 6 matches were correct.
 4. **Curate** (Claude Code does this. **No LLM API calls in the code.**): see below.
 5. **Render** (`mdl render`): reads `album.json`, `style.json` and `cover.jpg`, and writes
    `out/<run>/labels.pdf` and `out/<run>/proof-*.png`.
@@ -155,7 +164,7 @@ After `fetch`, for every album without a `style.json` (or that has `needs_review
 uv run mdl testsheet [--paper letter|a4] [--pages 2 | --albums N]  # placeholder labels + guides -> out/testsheet.pdf
 uv run mdl print [FILE] [--gui] [--dry-run]  # true-size print; no FILE = fzf picker over out/*.pdf
 uv run mdl pick [--paper a4] [--music-root DIR] [--no-fetch]  # album picker window -> selections/*.txt -> fetch
-uv run mdl fetch LIST [--force]        # local tags/art -> work/<slug>/album.json + cover.*
+uv run mdl fetch LIST [--force] [--offline] [--refresh]  # local tags/art, then CAA/iTunes for missing/low-res art
 uv run pytest
 # planned:
 uv run mdl render [--paper letter|a4]  # PDF + PNG proofs -> out/
@@ -178,6 +187,8 @@ src/md_labeler/
   picker.py         Qt album picker window (pyside6-essentials)
   fetch/__init__.py fetch stage: album list -> work/<slug>/
   fetch/local.py    tags + cover art from local files (mutagen, Pillow)
+  fetch/online.py   MusicBrainz release-group matching, Cover Art Archive, iTunes
+  fetch/http.py     cached, rate-limited HTTP (httpx)
 selections/         album lists written by `mdl pick` (gitignored)
 work/               per-album intermediate files (gitignored)
 cache/              HTTP cache (gitignored)

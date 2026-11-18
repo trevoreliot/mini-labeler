@@ -116,7 +116,7 @@ class Cover:
     source: str
 
 
-def _cover(data: bytes, source: str) -> Cover | None:
+def cover_from_bytes(data: bytes, source: str) -> Cover | None:
     try:
         img = Image.open(io.BytesIO(data))
         fmt, size = img.format, img.size
@@ -165,7 +165,7 @@ def find_cover(folder: Path, files: list[Path]) -> Cover | None:
     """The best cover: front covers beat other pictures, then the highest resolution wins."""
     candidates: list[tuple[bool, Cover]] = []
     for img in sorted(f for f in folder.iterdir() if f.is_file() and f.suffix.lower() in IMAGE_EXTS):
-        if c := _cover(img.read_bytes(), f"folder:{img.name}"):
+        if c := cover_from_bytes(img.read_bytes(), f"folder:{img.name}"):
             front = any(img.stem.lower().startswith(n) for n in COVER_NAMES)
             candidates.append((front, c))
     seen: set[int] = set()
@@ -174,7 +174,7 @@ def find_cover(folder: Path, files: list[Path]) -> Cover | None:
             if hash(data) in seen:  # usually the same image is embedded in every track
                 continue
             seen.add(hash(data))
-            if c := _cover(data, f"embedded:{f.name}"):
+            if c := cover_from_bytes(data, f"embedded:{f.name}"):
                 candidates.append((ptype == FRONT_COVER, c))
     if not candidates:
         return None
