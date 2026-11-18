@@ -155,3 +155,17 @@ def label_path(spec: LabelSpec, x: float, y: float, offset: float = 0.0) -> list
 
 def safe_rect(spec: LabelSpec, x: float, y: float) -> Rect:
     return Rect(x + spec.safe_x, y + spec.safe_y, spec.w - 2 * spec.safe_x, spec.h - 2 * spec.safe_y)
+
+
+# --- Raster art ----------------------------------------------------------------
+
+ART_DPI = 300
+
+
+def art_px_needed() -> int:
+    """Pixels needed on the cover's short side to print every art label at ART_DPI.
+
+    The cover is square, so it must cover the longest bleed-box side of any label it fills.
+    """
+    longest = max(max(LABELS[k].w, LABELS[k].h) + 2 * LABELS[k].bleed for k in (LabelKind.DISC, LabelKind.CASE_FRONT))
+    return math.ceil(longest / 25.4 * ART_DPI)

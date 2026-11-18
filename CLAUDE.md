@@ -81,6 +81,8 @@ Python ≥3.12, managed with **uv** (`uv run`, `uv add`). Chosen libraries:
 - **pymupdf**: renders PNG proofs from the output PDF, and inspects templates.
 - A palette extractor (for example `colorthief` or k-means in Pillow) feeds the styling step.
 - CLI with `typer`. Tests with `pytest`.
+- **mutagen** reads audio tags and embedded art. **pyside6-essentials** (Qt) for the album
+  picker; uv's bundled Tk has no font rendering, so don't use tkinter.
 
 Fonts are open-licence (OFL) TTFs committed under `assets/fonts/`, so output never depends on
 system fonts. The styling step may only choose fonts that exist in that directory.
@@ -89,10 +91,24 @@ system fonts. The styling step may only choose fonts that exist in that director
 Each stage reads and writes files under `work/<album-slug>/`, so stages can run again on
 their own and Claude can edit the files between stages.
 
-1. **Input**: a plain text file, one album per line: `Artist - Album`. Blank lines and lines
-   starting with `#` are ignored. Split on the **first** ` - ` (space-hyphen-space); album
-   titles can themselves contain hyphens.
-2. **Fetch** (`mdl fetch albums.txt`): search MusicBrainz for the release group, then choose a
+1. **Input**: a plain text file, one album per line: `Artist - Album`, optionally followed by a
+   **tab** and the local album folder (`albumlist.py`). Blank lines and lines starting with `#`
+   are ignored. Split on the **first** ` - ` (space-hyphen-space); album titles can themselves
+   contain hyphens. Usually written by **`mdl pick`**: a Qt (PySide6) window over the user's library
+   (`config.MUSIC_ROOT` = `/mnt/ssd500/Media/Music`, laid out `<artist>/<album>/<tracks>`).
+   The user adds albums until the 2-page batch is full (8 Letter / 9 A4); the artist is the
+   album folder's parent. The list goes to `selections/<date-time>.txt`, then fetch runs.
+2. **Fetch, local first** (`fetch/local.py`): for entries with a folder, read tags with
+   **mutagen** (album artist, album, year, track/disc numbers, titles, durations; WMA via ASF)
+   and take the best cover: folder images named cover/front/folder first, then embedded
+   front-cover pictures, then the highest resolution. Fall back to folder and file names for
+   missing tags. Writes `album.json` and `cover.<ext>` (original bytes, not re-encoded).
+   Anything local files can't supply goes in `Album.needs`: `"tracks"` (no tags or no
+   folder) or `"art"` (no art, or under `geometry.art_px_needed()` = 851 px, which is 72 mm at
+   300 dpi). An existing `album.json` is kept unless `--force`, so curated edits survive.
+   Library survey (Nov 2026): 530 albums; 78% have embedded art (only about 45% of those are
+   ≥851 px); 98% have full title tags; there are no folder images.
+3. **Fetch, MusicBrainz** (not built yet), only for albums with `needs`: search MusicBrainz for the release group, then choose a
    release. Prefer the original CD issue, then vinyl, and avoid deluxe or remaster editions
    unless the user requested one. Writes `album.json` (artist, title, year, release MBID,
    tracks with numbers, titles and durations, plus disc/side breaks for multi-disc or vinyl
@@ -106,10 +122,10 @@ their own and Claude can edit the files between stages.
      user IP-banned.
    - If the match is ambiguous or poor, still write `album.json` but add `"needs_review": true`
      and the candidate release IDs, rather than guessing silently.
-3. **Curate** (Claude Code does this. **No LLM API calls in the code.**): see below.
-4. **Render** (`mdl render`): reads `album.json`, `style.json` and `cover.jpg`, and writes
+4. **Curate** (Claude Code does this. **No LLM API calls in the code.**): see below.
+5. **Render** (`mdl render`): reads `album.json`, `style.json` and `cover.jpg`, and writes
    `out/<run>/labels.pdf` and `out/<run>/proof-*.png`.
-5. **Proof**: Claude views the PNG proofs and checks for overflow, low contrast, bad crops,
+6. **Proof**: Claude views the PNG proofs and checks for overflow, low contrast, bad crops,
    and a chamfer on the wrong corner.
 
 ## Curate step (Claude's job)
@@ -138,9 +154,10 @@ After `fetch`, for every album without a `style.json` (or that has `needs_review
 ```
 uv run mdl testsheet [--paper letter|a4] [--pages 2 | --albums N]  # placeholder labels + guides -> out/testsheet.pdf
 uv run mdl print [FILE] [--gui] [--dry-run]  # true-size print; no FILE = fzf picker over out/*.pdf
+uv run mdl pick [--paper a4] [--music-root DIR] [--no-fetch]  # album picker window -> selections/*.txt -> fetch
+uv run mdl fetch LIST [--force]        # local tags/art -> work/<slug>/album.json + cover.*
 uv run pytest
 # planned:
-uv run mdl fetch albums.txt            # metadata + art -> work/
 uv run mdl render [--paper letter|a4]  # PDF + PNG proofs -> out/
 ```
 
@@ -154,9 +171,14 @@ src/md_labeler/
   render/sheet.py   PDF drawing; `LabelPainter` callback draws each label's content
   render/proof.py   PNG proofs via pymupdf
   printing.py       lp command, PDF paper detection, fzf / kdialog file pickers
-  config.py         contact / User-Agent, printer
+  config.py         contact / User-Agent, printer, music root
   cli.py            typer app (`mdl`)
-  fetch/, models.py (planned)
+  models.py         Album / Track (album.json), slugify
+  albumlist.py      read/write the album list file
+  picker.py         Qt album picker window (pyside6-essentials)
+  fetch/__init__.py fetch stage: album list -> work/<slug>/
+  fetch/local.py    tags + cover art from local files (mutagen, Pillow)
+selections/         album lists written by `mdl pick` (gitignored)
 work/               per-album intermediate files (gitignored)
 cache/              HTTP cache (gitignored)
 out/                generated PDFs/proofs (gitignored)
